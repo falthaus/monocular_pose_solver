@@ -7,7 +7,7 @@
 
 #include <utility>
 #include <limits.h>
-#include "rpg_monocular_p3p.h"
+#include "rpg_monocular_solver.h"
 #include <stdarg.h>
 
 #include <Eigen/Dense>
