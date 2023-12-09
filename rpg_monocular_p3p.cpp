@@ -13,7 +13,7 @@
 #include <Eigen/Dense>
 using namespace Eigen;
 
-#include "rpg_monocular_pose_estimator_lib.h"
+#include "monocular_pose_estimator_lib/p3p.h"
 using namespace monocular_pose_estimator;
 
 
@@ -64,7 +64,7 @@ void set_world_points(double* wp, char* buf, size_t len)
     // pretty sure there is a better way to do this, but I can't figure it out now
 
     Map<Matrix<double, 3, 4, RowMajor>> wp_mapped(wp);
-    
+
     for (int c = 0; c < world_points.cols(); c++)
     {
         for (int r = 0; r < world_points.rows(); r++)
@@ -76,7 +76,7 @@ void set_world_points(double* wp, char* buf, size_t len)
 
     int offset = 0;
     print_matrix(buf, &offset, len, world_points);
-    
+
 }
 
 
@@ -98,7 +98,7 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
 
     Eigen::Matrix<double, 2, 4> blob_vectors;
 
-   
+
     for (int i = 0; i < blob_vectors.cols(); i++)
     {
         blob_vectors.col(i).x() = (double)(blobs[i]);
@@ -124,7 +124,7 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
 
     executed_correctly = P3P::computePoses(feature_vectors, world_points.leftCols(3), solutions);
 
-    
+
     //const double ERROR_THRESHOLD = 5.0;
     float min_error_4pt = (std::numeric_limits<float>::max)();
     int best_pose_4pt = -1;
@@ -169,7 +169,7 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
 
 
     }
-    
+
 
     print_str(buf, &offset, len, "blob_vectors:\n");
     print_matrix(buf, &offset, len, blob_vectors);
@@ -193,7 +193,7 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
     print_matrix(buf, &offset, len, reprojected_blobs[2]);
     print_matrix(buf, &offset, len, reprojected_blobs[3]);
 
-    
+
     print_str(buf, &offset, len, "reprojection_errors_4pt:\n");
     for (int i = 0; i < 4; i++)
     {
@@ -216,11 +216,11 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
     for (int i = 0; i < (3 * 3); i++)
         R[i] = solutions[best_pose_4pt].leftCols(3).data()[i];
 
-    
+
     t[0] = solutions[best_pose_4pt](0,3);
     t[1] = solutions[best_pose_4pt](1,3);
     t[2] = solutions[best_pose_4pt](2,3);
-    
+
 
     *reprojection_error = reprojection_errors_4pt[best_pose_4pt];
 

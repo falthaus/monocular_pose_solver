@@ -10,10 +10,10 @@
                 "/EHsc",
                 "/nologo",
                 "/DTESTDLL1_EXPORTS",
-                "/IC:\\Users\\Felix\\Projects\\FormationFlying\\src\\eigen",
-                "/IC:\\Users\\Felix\\Documents\\Arduino\\libraries\\rpg_monocular_pose_estimator\\src",
+                "/Ieigen",
+                "/Irpg_monocular_pose_estimator\\monocular_pose_estimator_lib\\include",
                 "${file}",
-                "C:\\Users\\Felix\\Documents\\Arduino\\libraries\\rpg_monocular_pose_estimator\\src\\rpg_monocular_pose_estimator_lib\\p3p.cpp",
+                "rpg_monocular_pose_estimator\\monocular_pose_estimator_lib\\src\\p3p.cpp",
             ],
             "problemMatcher": [
                 "$msCompile"
