@@ -1,13 +1,29 @@
-////////////////////////////////////////////////////////////////////////////////
+/*
+ * monocular_pose_solver.cpp
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ */
 
 
 
-////////////////////////////////////////////////////////////////////////////////
-
+#include "monocular_pose_solver.h"
 
 #include <utility>
 #include <limits.h>
-#include "rpg_monocular_solver.h"
 #include <stdarg.h>
 
 #include <Eigen/Dense>
@@ -17,28 +33,23 @@ using namespace Eigen;
 using namespace monocular_pose_estimator;
 
 
-////////////////////////////////////////////////////////////////////////////////
-
 
 Eigen::Matrix3d camera_matrix;
 Eigen::Matrix<double, 3, 4> world_points;
 
 
-////////////////////////////////////////////////////////////////////////////////
 
-
+/*
+ * Helper functions for "pretty printing" into string buffer
+ *
+ */
 void print_str(char* buf, int* offset, size_t len, const char* fmt, ...);
-
 void print_matrix(char* buf, int* offset, size_t len, const MatrixXd& m);
 
-
-////////////////////////////////////////////////////////////////////////////////
 
 
 void set_camera_matrix(double* cm, char* buf, size_t len)
 {
-    // pretty sure there is a better way to do this, but I can't figure it out now
-
     Map<Matrix<double, 3, 3, RowMajor>> cm_mapped(cm);
 
     for (int c = 0; c < camera_matrix.cols(); c++)
@@ -52,17 +63,12 @@ void set_camera_matrix(double* cm, char* buf, size_t len)
 
     int offset = 0;
     print_matrix(buf, &offset, len, camera_matrix);
-
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
 
 
 void set_world_points(double* wp, char* buf, size_t len)
 {
-    // pretty sure there is a better way to do this, but I can't figure it out now
-
     Map<Matrix<double, 3, 4, RowMajor>> wp_mapped(wp);
 
     for (int c = 0; c < world_points.cols(); c++)
@@ -76,11 +82,8 @@ void set_world_points(double* wp, char* buf, size_t len)
 
     int offset = 0;
     print_matrix(buf, &offset, len, world_points);
-
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
 
 
 void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, char* buf, size_t len)
@@ -121,9 +124,7 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
     print_str(buf, &offset, len, "world_points:\n");
     print_matrix(buf, &offset, len, world_points);
 
-
     executed_correctly = P3P::computePoses(feature_vectors, world_points.leftCols(3), solutions);
-
 
     //const double ERROR_THRESHOLD = 5.0;
     float min_error_4pt = (std::numeric_limits<float>::max)();
@@ -167,9 +168,7 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
             best_pose_1pt = s;
         }
 
-
     }
-
 
     print_str(buf, &offset, len, "blob_vectors:\n");
     print_matrix(buf, &offset, len, blob_vectors);
@@ -186,13 +185,11 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
     print_str(buf, &offset, len, "solutions[3]:\n");
     print_matrix(buf, &offset, len, solutions[3]);
 
-
     print_str(buf, &offset, len, "reprojected_blobs:\n");
     print_matrix(buf, &offset, len, reprojected_blobs[0]);
     print_matrix(buf, &offset, len, reprojected_blobs[1]);
     print_matrix(buf, &offset, len, reprojected_blobs[2]);
     print_matrix(buf, &offset, len, reprojected_blobs[3]);
-
 
     print_str(buf, &offset, len, "reprojection_errors_4pt:\n");
     for (int i = 0; i < 4; i++)
@@ -208,38 +205,33 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
     }
     print_str(buf, &offset, len, "\n");
 
-
     print_str(buf, &offset, len, "best solution (4pt): #%d\n", best_pose_4pt);
     print_str(buf, &offset, len, "best solution (1pt): #%d\n", best_pose_1pt);
 
-
+    // copy outputs (Rmat, tvec, reprojection error)
     for (int i = 0; i < (3 * 3); i++)
         R[i] = solutions[best_pose_4pt].leftCols(3).data()[i];
-
 
     t[0] = solutions[best_pose_4pt](0,3);
     t[1] = solutions[best_pose_4pt](1,3);
     t[2] = solutions[best_pose_4pt](2,3);
-
 
     *reprojection_error = reprojection_errors_4pt[best_pose_4pt];
 
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
 
-
-// TODO: add argument to return indices of used blobs
 void solve_pnp(float* blobs, unsigned int blobcount, double* R, double* t, float* reprojection_error, char* buf, size_t len)
 {
 
+    // TODO: add argument to return indices of used blobs
 
+    // TODO: implement
+    ;
 
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
 
 
 void print_str(char* buf, int* offset, size_t len, const char* fmt, ...)
@@ -251,11 +243,8 @@ void print_str(char* buf, int* offset, size_t len, const char* fmt, ...)
     va_start(args, fmt);
     *offset += vsnprintf(buf + *offset, len - *offset, fmt, args);
     va_end(args);
-
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
 
 
 void print_matrix(char* buf, int* offset, size_t len, const MatrixXd& m)
@@ -272,6 +261,3 @@ void print_matrix(char* buf, int* offset, size_t len, const MatrixXd& m)
     *offset += snprintf(buf + *offset, len - *offset, "\n");
 
 }
-
-
-////////////////////////////////////////////////////////////////////////////////
