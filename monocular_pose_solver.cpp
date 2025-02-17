@@ -30,12 +30,15 @@
 using namespace Eigen;
 
 #include "monocular_pose_estimator_lib/p3p.h"
+#include "monocular_pose_estimator_lib/pose_estimator.h"
 using namespace monocular_pose_estimator;
 
 
 
-Eigen::Matrix3d camera_matrix;
-Eigen::Matrix<double, 3, 4> world_points;
+Matrix3d camera_matrix;
+Matrix<double, 3, 4> world_points;
+
+PoseEstimator pose_estimator;
 
 
 
@@ -44,70 +47,103 @@ Eigen::Matrix<double, 3, 4> world_points;
  *
  */
 void print_str(char* buf, int* offset, size_t len, const char* fmt, ...);
-void print_matrix(char* buf, int* offset, size_t len, const MatrixXd& m);
+void print_matrix(char* buf, int* offset, size_t len, const MatrixXd& m, const unsigned precision = 6);
 
 
 
-void set_camera_matrix(double* cm, char* buf, size_t len)
+
+void set_camera_matrix(double cm[3*3], char* buf, size_t len)
 {
-    Map<Matrix<double, 3, 3, RowMajor>> cm_mapped(cm);
+    int offset = 0;
 
-    for (int c = 0; c < camera_matrix.cols(); c++)
+    for (int r = 0; r < camera_matrix.rows(); r++)
     {
-        for (int r = 0; r < camera_matrix.rows(); r++)
+        for (int c = 0; c < camera_matrix.cols(); c++)
         {
-            camera_matrix(r, c) = cm_mapped(r, c);
+            camera_matrix(r,c) = cm[r*camera_matrix.cols()+c];
+            pose_estimator.camera_matrix_K_(r,c) = camera_matrix(r,c);
         }
-
     }
 
-    int offset = 0;
+    print_str(buf, &offset, len, "camera_matrix:\n");
     print_matrix(buf, &offset, len, camera_matrix);
+    print_str(buf, &offset, len, "\n");
+
 }
 
 
 
-void set_world_points(double* wp, char* buf, size_t len)
+
+void set_world_points(double wp[3*4], char* buf, size_t len)
 {
-    Map<Matrix<double, 3, 4, RowMajor>> wp_mapped(wp);
+    int offset = 0;
 
-    for (int c = 0; c < world_points.cols(); c++)
+    for (int r = 0; r < world_points.rows(); r++)
     {
-        for (int r = 0; r < world_points.rows(); r++)
+        for (int c = 0; c < world_points.cols(); c++)
         {
-            world_points(r, c) = wp_mapped(r, c);
+            world_points(r, c) = wp[r*world_points.cols()+c];
         }
-
     }
 
-    int offset = 0;
+    // Marker points:
+    Matrix<Vector4d, 4, 1> markers;
+    //
+    for (int i=0; i<markers.rows(); i++)
+    {
+        markers[i].head(3) = world_points.col(i);
+        markers[i](3) = 1.0;
+    }
+    //
+    pose_estimator.setMarkerPositions(markers);
+
+    print_str(buf, &offset, len, "world_points:\n");
     print_matrix(buf, &offset, len, world_points);
+    print_str(buf, &offset, len, "\n");
+
+
+    print_str(buf, &offset, len, "markers:\n");
+    for (int i=0; i<markers.rows(); i++)
+    {
+        print_matrix(buf, &offset, len, markers[i].transpose());
+    }
+    print_str(buf, &offset, len, "\n");
+
 }
 
 
 
-void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, char* buf, size_t len)
+
+
+/*
+computePoses() provides matrices for transforming points from the camera to the world frame
+i.e.: camera frame -> world frame
+*/
+
+//int solve_p4p(float blobs[2][4], double* Rmat, double* tvec, float* reprojection_error, char* buf, size_t len)
+int solve_p4p(float blobs[2*4], double Rmat[3*3], double tvec[3*1], float* reprojection_error, char* buf, size_t len)
 {
 
     int offset = 0;
-    Eigen::Matrix<double, 3, 3> feature_vectors;
-    Eigen::Matrix<Eigen::Matrix<double, 3, 4>, 4, 1> solutions;
+    Matrix<double, 3, 3> feature_vectors;
+    Matrix<Matrix<double, 3, 4>, 4, 1> solutions;
     int executed_correctly;
 
-    Eigen::Matrix<Eigen::Matrix<double, 3, 4>, 4, 1> reprojected_points;
-    Eigen::Matrix<Eigen::Matrix<double, 2, 4>, 4, 1> reprojected_blobs;
+    Matrix<Matrix<double, 3, 4>, 4, 1> reprojected_points;
+    Matrix<Matrix<double, 2, 4>, 4, 1> reprojected_blobs;
     float reprojection_errors_4pt[4];
     float reprojection_errors_1pt[4];
 
-    Eigen::Matrix<double, 2, 4> blob_vectors;
+    Matrix<double, 2, 4> blob_vectors;
 
 
+    // 'blobs' is row-major aka 'C' (numpy default)
+    // ('row-major': rows are contiguous in memory)
     for (int i = 0; i < blob_vectors.cols(); i++)
     {
         blob_vectors.col(i).x() = (double)(blobs[i]);
         blob_vectors.col(i).y() = (double)(blobs[blob_vectors.cols() + i]);
     }
-
 
     for (int i = 0; i < feature_vectors.cols(); i++)
     {
@@ -208,20 +244,41 @@ void solve_p4p(float* blobs, double* R, double* t, float* reprojection_error, ch
     print_str(buf, &offset, len, "best solution (4pt): #%d\n", best_pose_4pt);
     print_str(buf, &offset, len, "best solution (1pt): #%d\n", best_pose_1pt);
 
-    // copy outputs (Rmat, tvec, reprojection error)
-    for (int i = 0; i < (3 * 3); i++)
-        R[i] = solutions[best_pose_4pt].leftCols(3).data()[i];
 
-    t[0] = solutions[best_pose_4pt](0,3);
-    t[1] = solutions[best_pose_4pt](1,3);
-    t[2] = solutions[best_pose_4pt](2,3);
+    // copy Rmat to output array
+    for(int r=0; r<3; r++)
+    {
+        for(int c=0; c<3; c++)
+        {
+            // Note: Eigen uses colum-major storage order
+            // ('column-major': columns are contiguous in memory)
 
+            // copy one-to-one:
+            //R[c*3+r] = solutions[best_pose_4pt](r,c);
+
+            // copy transposed
+            Rmat[r*3+c] = solutions[best_pose_4pt](r,c);
+        }
+    }
+
+    // copy tvec to output array
+    for(int i=0; i<3; i++)
+    {
+        tvec[i] = solutions[best_pose_4pt](i,3);
+    }
+
+    // copy minimum achieved reprojection error
     *reprojection_error = reprojection_errors_4pt[best_pose_4pt];
 
+
+    // Return value:
+    // 0: success
+    return 0;
 }
 
 
 
+/*
 void solve_pnp(float* blobs, unsigned int blobcount, double* R, double* t, float* reprojection_error, char* buf, size_t len)
 {
 
@@ -231,6 +288,103 @@ void solve_pnp(float* blobs, unsigned int blobcount, double* R, double* t, float
     ;
 
 }
+*/
+
+
+
+void optimize_pose(float* blobs, unsigned blobcount, unsigned* correspondences, double* Rmat, double* tvec, char* buf, size_t len, unsigned max_iter)
+{
+
+    int offset = 0;
+
+    Matrix4d pose;
+
+
+    // Correspondences:
+    // Corresponces between the LEDs/marker positions (first column)
+    // and the image detections (second column) using one-based counting
+    pose_estimator.setCorrespondences(Map<Matrix<uint32_t, 4, 2, RowMajor>>(correspondences));
+    //
+    print_str(buf, &offset, len, "correspondences:\n");
+    print_matrix(buf, &offset, len, Map<Matrix<uint32_t, 4, 2, RowMajor>>(correspondences).cast <double> (), 0);
+
+
+
+    // Pose:
+    //                      | r11 r12 r13 | tx |
+    //      | R | t |       | r21 r22 r23 | ty |
+    //      | 0 | 1 |       | r31 r32 r33 | tz |
+    //                      |  0   0   0  |  1 |
+    //
+    Map<Matrix<double, 3, 3, RowMajor>> Rmat_mapped(Rmat);
+    Map<Matrix<double, 3, 1>> tvec_mapped(tvec);
+    //
+    pose.block(0,0,3,3) = Rmat_mapped;
+    pose.block(0,3,3,1) = tvec_mapped;
+    pose.row(3) << 0.0, 0.0, 0.0, 1.0;
+    //
+    pose_estimator.setPredictedPose(pose);
+
+
+
+    // Image points:
+    Matrix<Vector2d, Dynamic, 1> image_points;
+    image_points.resize(blobcount);
+    //
+    for (int i = 0; i < image_points.rows(); i++)
+    {
+       image_points(i).x() = (double)(blobs[i]);
+       image_points(i).y() = (double)(blobs[i+blobcount]);
+    }
+    //
+    pose_estimator.setImagePoints(image_points);
+    //
+    print_str(buf, &offset, len, "image_points:\n");
+    for(int i=0; i < image_points.rows(); i++)
+        print_str(buf, &offset, len, "%.3f\t", image_points(i).x());
+    print_str(buf, &offset, len, "\n");
+    for(int i=0; i < image_points.rows(); i++)
+        print_str(buf, &offset, len, "%.3f\t", image_points(i).y());
+    print_str(buf, &offset, len, "\n\n");
+
+
+
+    print_str(buf, &offset, len, "Initial pose:\n");
+    print_matrix(buf, &offset, len, pose_estimator.getPredictedPose());
+
+    print_str(buf, &offset, len, "Max iter: %d\n\n", max_iter);
+    pose_estimator.optimisePose(max_iter);
+
+    Matrix4d optimized_pose;
+    optimized_pose = pose_estimator.getPredictedPose();
+
+    Rmat_mapped(0,0) = optimized_pose(0,0);
+    Rmat_mapped(1,0) = optimized_pose(1,0);
+    Rmat_mapped(2,0) = optimized_pose(2,0);
+    Rmat_mapped(0,1) = optimized_pose(0,1);
+    Rmat_mapped(1,1) = optimized_pose(1,1);
+    Rmat_mapped(2,1) = optimized_pose(2,1);
+    Rmat_mapped(0,2) = optimized_pose(0,2);
+    Rmat_mapped(1,2) = optimized_pose(1,2);
+    Rmat_mapped(2,2) = optimized_pose(2,2);
+
+    tvec_mapped(0,0) = optimized_pose(0,3);
+    tvec_mapped(1,0) = optimized_pose(1,3);
+    tvec_mapped(2,0) = optimized_pose(2,3);
+
+    print_str(buf, &offset, len, "Optimized pose:\n");
+    print_matrix(buf, &offset, len, optimized_pose);
+
+    print_str(buf, &offset, len, "Optimized pose covariance:\n");
+    print_matrix(buf, &offset, len, pose_estimator.getPoseCovariance());
+
+    print_str(buf, &offset, len, "Optimized Rmat:\n");
+    print_matrix(buf, &offset, len, Rmat_mapped);
+    print_str(buf, &offset, len, "Optimized tvec:\n");
+    print_matrix(buf, &offset, len, tvec_mapped);
+
+}
+
 
 
 
@@ -247,14 +401,17 @@ void print_str(char* buf, int* offset, size_t len, const char* fmt, ...)
 
 
 
-void print_matrix(char* buf, int* offset, size_t len, const MatrixXd& m)
+void print_matrix(char* buf, int* offset, size_t len, const MatrixXd& m, const unsigned precision)
 {
+
+    char fmt[16];
+    snprintf(fmt, 16, "%% .%df    ", precision);
 
     for (int r = 0; r < m.rows(); r++)
     {
         for (int c = 0; c < m.cols(); c++)
         {
-            *offset += snprintf(buf + *offset, len - *offset, "%.6f    ", m(r, c));
+            *offset += snprintf(buf + *offset, len - *offset, fmt, m(r, c));
         }
         *offset += snprintf(buf + *offset, len - *offset, "\n");
     }

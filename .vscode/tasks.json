@@ -16,6 +16,7 @@
                 "/Fe${fileBasenameNoExtension}_x64.dll",
                 "${file}",
                 "..\\lib\\rpg_monocular_pose_estimator\\monocular_pose_estimator_lib\\src\\p3p.cpp",
+                "..\\lib\\rpg_monocular_pose_estimator\\monocular_pose_estimator_lib\\src\\pose_estimator.cpp",
             ],
             "problemMatcher": ["$msCompile"],
             "group": {
